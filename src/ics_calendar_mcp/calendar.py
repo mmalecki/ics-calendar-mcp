@@ -62,7 +62,8 @@ class ICSCalendarClient:
                     f"Calendar feed returned HTTP {e.response.status_code} "
                     f"{e.response.reason_phrase}"
                 ) from None
-            except httpx.HTTPError as e:
+            # InvalidURL isn't an HTTPError: httpx raises it before sending.
+            except (httpx.HTTPError, httpx.InvalidURL) as e:
                 raise CalendarFetchError(
                     f"Could not fetch the calendar feed ({type(e).__name__})"
                 ) from None

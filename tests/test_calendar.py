@@ -162,6 +162,15 @@ class TestFetchErrors:
 
         assert str(excinfo.value) == "Could not fetch the calendar feed (ConnectError)"
 
+    @pytest.mark.asyncio
+    async def test_invalid_url(self):
+        client = ICSCalendarClient(url=SECRET_URL.replace("basic", "\x01basic"))
+
+        with pytest.raises(CalendarFetchError) as excinfo:
+            await client.fetch_calendar()
+
+        assert str(excinfo.value) == "Could not fetch the calendar feed (InvalidURL)"
+
 
 class TestGetEventsBetween:
     @pytest.mark.asyncio
