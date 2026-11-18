@@ -3,7 +3,9 @@
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
+import respx
 
 from ics_calendar_mcp.calendar import reset_client, set_client, ICSCalendarClient
 from ics_calendar_mcp.server import (
@@ -93,6 +95,17 @@ class TestGetEventsRange:
 
         assert "error" in result
         assert "end_date must be after start_date" in result["error"]
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_feed_error_hides_url(self):
+        url = "https://calendar.example.com/ical/me/private-s3cr3t/basic.ics"
+        respx.get(url).mock(return_value=httpx.Response(503))
+        set_client(ICSCalendarClient(url=url))
+
+        result = await get_events_range("2024-03-10", "2024-03-15")
+
+        assert result["error"] == "Calendar feed returned HTTP 503 Service Unavailable"
 
 
 class TestGetEventDetails:
