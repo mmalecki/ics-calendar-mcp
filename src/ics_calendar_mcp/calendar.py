@@ -11,6 +11,15 @@ import recurring_ical_events
 from .utils import format_event, format_event_short, format_recurring_event
 
 
+class CalendarFetchError(Exception):
+    """The feed could not be fetched.
+
+    The message never includes the feed's URL: secret addresses, such as
+    Google Calendar's, carry the credential in the URL itself, and tools
+    return error messages to the model.
+    """
+
+
 class ICSCalendarClient:
     """Client for fetching and parsing ICS calendar feeds."""
 
@@ -43,8 +52,20 @@ class ICSCalendarClient:
             return self._calendar
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(self.url)
-            response.raise_for_status()
+            # httpx's messages include the URL, and a redirect's Location.
+            # `from None` keeps them out of tracebacks too.
+            try:
+                response = await client.get(self.url)
+                response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                raise CalendarFetchError(
+                    f"Calendar feed returned HTTP {e.response.status_code} "
+                    f"{e.response.reason_phrase}"
+                ) from None
+            except httpx.HTTPError as e:
+                raise CalendarFetchError(
+                    f"Could not fetch the calendar feed ({type(e).__name__})"
+                ) from None
 
             self._calendar = Calendar.from_ical(response.text)
             self._last_fetch = now

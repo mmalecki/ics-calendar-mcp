@@ -1,5 +1,6 @@
 """MCP Server with calendar tools."""
 
+import logging
 from datetime import date, timedelta
 
 from mcp.server.fastmcp import FastMCP
@@ -11,6 +12,11 @@ mcp = FastMCP(
     "ics-calendar",
     dependencies=["httpx", "icalendar", "recurring-ical-events", "python-dateutil"],
 )
+
+# FastMCP logs at INFO to stderr, and httpx logs every request at INFO with its
+# URL. Secret addresses, such as Google Calendar's, carry the credential in the
+# URL, and MCP clients keep servers' stderr in their logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @mcp.tool()

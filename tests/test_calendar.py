@@ -3,10 +3,13 @@
 from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
+import respx
 from icalendar import Calendar, Event
 
 from ics_calendar_mcp.calendar import (
+    CalendarFetchError,
     ICSCalendarClient,
     get_client,
     reset_client,
@@ -113,6 +116,51 @@ class TestFetchCalendar:
 
             # Should only fetch once due to caching
             assert mock_instance.get.call_count == 1
+
+
+SECRET_URL = "https://calendar.example.com/ical/me/private-s3cr3t/basic.ics"
+
+
+class TestFetchErrors:
+    """Errors reach the model, so they must not carry the feed's URL."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_http_status(self):
+        respx.get(SECRET_URL).mock(return_value=httpx.Response(503))
+        client = ICSCalendarClient(url=SECRET_URL)
+
+        with pytest.raises(CalendarFetchError) as excinfo:
+            await client.fetch_calendar()
+
+        assert str(excinfo.value) == "Calendar feed returned HTTP 503 Service Unavailable"
+        assert excinfo.value.__cause__ is None
+        assert excinfo.value.__suppress_context__
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_redirect(self):
+        location = SECRET_URL.replace("https:", "http:")
+        respx.get(SECRET_URL).mock(
+            return_value=httpx.Response(302, headers={"Location": location})
+        )
+        client = ICSCalendarClient(url=SECRET_URL)
+
+        with pytest.raises(CalendarFetchError) as excinfo:
+            await client.fetch_calendar()
+
+        assert "s3cr3t" not in str(excinfo.value)
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_connection_error(self):
+        respx.get(SECRET_URL).mock(side_effect=httpx.ConnectError(f"failed: {SECRET_URL}"))
+        client = ICSCalendarClient(url=SECRET_URL)
+
+        with pytest.raises(CalendarFetchError) as excinfo:
+            await client.fetch_calendar()
+
+        assert str(excinfo.value) == "Could not fetch the calendar feed (ConnectError)"
 
 
 class TestGetEventsBetween:
